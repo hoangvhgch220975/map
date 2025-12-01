@@ -10,9 +10,17 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 
   <style>
-    html, body { height: 100%; margin: 0; }
-    #map { height: 100%; width: 100%; }
+    html, body {
+      height: 100%;
+      margin: 0;
+    }
 
+    #map {
+      height: 100%;
+      width: 100%;
+    }
+
+    /* Search Bar */
     #searchBox {
       position: absolute;
       top: 15px;
@@ -26,7 +34,7 @@
       border-radius: 20px;
       border: 1px solid #bbb;
       font-size: 16px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
       box-sizing: border-box;
     }
 
@@ -34,15 +42,38 @@
       position: absolute;
       right: 25px;
       top: 28px;
+      z-index: 2001;
       cursor: pointer;
       font-size: 20px;
       color: #666;
-      z-index: 2001;
     }
 
-    #searchResults {
+    /* Coordinates Panel */
+    #coordPanel {
       position: absolute;
       top: 70px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 80%;
+      max-width: 400px;
+      background: #ffffff;
+      padding: 10px 16px;
+      border-radius: 14px;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+      font-size: 14px;
+      line-height: 1.4;
+      z-index: 2000;
+      border: 1px solid #ddd;
+    }
+
+    #coordPanel strong {
+      color: #333;
+    }
+
+    /* Search Results */
+    #searchResults {
+      position: absolute;
+      top: 120px;
       left: 50%;
       transform: translateX(-50%);
       width: 80%;
@@ -60,11 +91,13 @@
       padding: 12px;
       cursor: pointer;
       border-bottom: 1px solid #eee;
-      font-size: 14px;
     }
 
-    .result-item:hover { background: #f5f5f5; }
+    .result-item:hover {
+      background: #f5f5f5;
+    }
 
+    /* Toggle Directions button */
     .custom-button {
       position: absolute;
       top: 15px;
@@ -79,65 +112,76 @@
       box-shadow: 0 2px 6px rgba(0,0,0,0.3);
     }
 
-    .leaflet-routing-container { display: none; }
+    .leaflet-routing-container {
+      display: none;
+    }
   </style>
 </head>
+
 <body>
 
 <input id="searchBox" type="text" placeholder="Search destination..." autocomplete="off">
 <span id="searchIcon" class="fa fa-search"></span>
+
+<div id="coordPanel">
+  <strong>Picked Location:</strong><br>
+  Lat: <span id="latVal">None</span><br>
+  Lon: <span id="lonVal">None</span>
+</div>
+
 <div id="searchResults"></div>
 
 <div class="custom-button" id="toggleInstructions">🗺️ Show Directions</div>
 <div id="map"></div>
 
+
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.min.js"></script>
 
 <script>
-  // Default fallback start point
+
   let startLatLng = L.latLng(21.023872, 105.790434);
 
-  const map = L.map('map', { center: startLatLng, zoom: 14 });
+  const map = L.map('map', {
+    center: startLatLng,
+    zoom: 14
+  });
 
+  // Base layer
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-  let startMarker = L.marker(startLatLng)
-    .addTo(map)
-    .bindPopup("📍 Start");
-
+  let startMarker = L.marker(startLatLng).addTo(map);
   let routingControl = null;
   let destMarker = null;
 
-  // Only update searchBox when user selects or clicks a location
-  function updateSearchBox(latlng) {
-    const txt = `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`;
-    document.getElementById("searchBox").value = txt;
+  function updateCoordPanel(latlng) {
+    document.getElementById("latVal").textContent = latlng.lat.toFixed(6);
+    document.getElementById("lonVal").textContent = latlng.lng.toFixed(6);
   }
 
   function drawRoute(destLatLng) {
     if (routingControl) map.removeControl(routingControl);
     if (destMarker) map.removeLayer(destMarker);
 
-    destMarker = L.marker(destLatLng).addTo(map).bindPopup("🏁 Destination");
+    destMarker = L.marker(destLatLng).addTo(map);
 
     routingControl = L.Routing.control({
       waypoints: [startLatLng, destLatLng],
       routeWhileDragging: false,
-      fitSelectedRoutes: true,
       addWaypoints: false,
+      fitSelectedRoutes: true,
       lineOptions: { styles: [{ color: 'blue', weight: 5 }] },
     }).addTo(map);
 
-    document.querySelector('.leaflet-routing-container').style.display = "none";
+    document.querySelector(".leaflet-routing-container").style.display = "none";
   }
 
-  // SEARCH BAR
+  // SEARCH
   const searchBox = document.getElementById("searchBox");
   const searchResults = document.getElementById("searchResults");
 
-  document.getElementById("searchIcon").addEventListener("click", search);
-  searchBox.addEventListener("keydown", (e) => { if (e.key === "Enter") search(); });
+  document.getElementById("searchIcon").onclick = search;
+  searchBox.onkeydown = (e) => { if (e.key === "Enter") search(); };
 
   async function search() {
     const text = searchBox.value.trim();
@@ -157,13 +201,16 @@
       const div = document.createElement("div");
       div.className = "result-item";
       div.textContent = item.display_name;
+
       div.onclick = () => {
         const destLatLng = L.latLng(item.lat, item.lon);
-        map.flyTo(destLatLng, 15);
+
+        updateCoordPanel(destLatLng);
         drawRoute(destLatLng);
-        updateSearchBox(destLatLng); // Only show picked location
+        map.flyTo(destLatLng, 15);
         searchResults.style.display = "none";
       };
+
       searchResults.appendChild(div);
     });
 
@@ -174,13 +221,14 @@
     if (e.target !== searchBox) searchResults.style.display = "none";
   });
 
-  // TAP TO PICK — Only this updates UI
+  // TAP TO PICK LOCATION
   map.on("click", (e) => {
-    updateSearchBox(e.latlng);
+    updateCoordPanel(e.latlng);
     drawRoute(e.latlng);
   });
 
-  document.getElementById("toggleInstructions").addEventListener("click", () => {
+  // Toggle Directions Panel
+  document.getElementById("toggleInstructions").onclick = () => {
     const container = document.querySelector(".leaflet-routing-container");
     if (!container) return;
 
@@ -191,7 +239,8 @@
       container.style.display = "none";
       toggleInstructions.textContent = "🗺️ Show Directions";
     }
-  });
+  };
+
 </script>
 
 </body>
