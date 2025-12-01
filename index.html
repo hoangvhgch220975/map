@@ -54,7 +54,6 @@
       display: none;
       max-height: 260px;
       overflow-y: auto;
-      box-sizing: border-box;
     }
 
     .result-item {
@@ -96,6 +95,7 @@
 <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.min.js"></script>
 
 <script>
+  // Default fallback start point
   let startLatLng = L.latLng(21.023872, 105.790434);
 
   const map = L.map('map', { center: startLatLng, zoom: 14 });
@@ -109,6 +109,7 @@
   let routingControl = null;
   let destMarker = null;
 
+  // Only update searchBox when user selects or clicks a location
   function updateSearchBox(latlng) {
     const txt = `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`;
     document.getElementById("searchBox").value = txt;
@@ -131,22 +132,6 @@
     document.querySelector('.leaflet-routing-container').style.display = "none";
   }
 
-  // Auto-detect user location
-  if ("geolocation" in navigator) {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        startLatLng = L.latLng(pos.coords.latitude, pos.coords.longitude);
-        startMarker.setLatLng(startLatLng).setPopupContent("📍 Your location");
-        map.setView(startLatLng, 15);
-        updateSearchBox(startLatLng);
-      },
-      () => updateSearchBox(startLatLng),
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  } else {
-    updateSearchBox(startLatLng);
-  }
-
   // SEARCH BAR
   const searchBox = document.getElementById("searchBox");
   const searchResults = document.getElementById("searchResults");
@@ -156,8 +141,9 @@
 
   async function search() {
     const text = searchBox.value.trim();
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(text)}`;
+    if (text.length < 2) return;
 
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(text)}`;
     const res = await fetch(url);
     const data = await res.json();
 
@@ -175,7 +161,7 @@
         const destLatLng = L.latLng(item.lat, item.lon);
         map.flyTo(destLatLng, 15);
         drawRoute(destLatLng);
-        updateSearchBox(destLatLng);
+        updateSearchBox(destLatLng); // Only show picked location
         searchResults.style.display = "none";
       };
       searchResults.appendChild(div);
@@ -188,13 +174,12 @@
     if (e.target !== searchBox) searchResults.style.display = "none";
   });
 
-  // TAP TO PICK LOCATION
+  // TAP TO PICK — Only this updates UI
   map.on("click", (e) => {
     updateSearchBox(e.latlng);
     drawRoute(e.latlng);
   });
 
-  // TOGGLE ROUTE PANEL
   document.getElementById("toggleInstructions").addEventListener("click", () => {
     const container = document.querySelector(".leaflet-routing-container");
     if (!container) return;
