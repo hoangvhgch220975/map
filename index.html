@@ -125,6 +125,7 @@
 
 <div id="coordPanel">
   <strong>Picked Location:</strong><br>
+  Name: <span id="nameVal">None</span><br>
   Lat: <span id="latVal">None</span><br>
   Lon: <span id="lonVal">None</span>
 </div>
@@ -134,12 +135,10 @@
 <div class="custom-button" id="toggleInstructions">🗺️ Show Directions</div>
 <div id="map"></div>
 
-
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.min.js"></script>
 
 <script>
-
   let startLatLng = L.latLng(21.023872, 105.790434);
 
   const map = L.map('map', {
@@ -154,9 +153,16 @@
   let routingControl = null;
   let destMarker = null;
 
-  function updateCoordPanel(latlng) {
+  function updateCoordPanel(latlng, name) {
     document.getElementById("latVal").textContent = latlng.lat.toFixed(6);
     document.getElementById("lonVal").textContent = latlng.lng.toFixed(6);
+
+    const nameEl = document.getElementById("nameVal");
+    if (name && name.trim() !== "") {
+      nameEl.textContent = name;
+    } else {
+      nameEl.textContent = "Unknown";
+    }
   }
 
   function drawRoute(destLatLng) {
@@ -170,17 +176,35 @@
       routeWhileDragging: false,
       addWaypoints: false,
       fitSelectedRoutes: true,
-      lineOptions: { styles: [{ color: 'blue', weight: 5 }] },
+      lineOptions: { styles: [{ color: 'blue', weight: 5 }] }
     }).addTo(map);
 
-    document.querySelector(".leaflet-routing-container").style.display = "none";
+    const container = document.querySelector(".leaflet-routing-container");
+    if (container) {
+      container.style.display = "none";
+    }
+  }
+
+  // Reverse geocoding to get name from coordinates
+  async function getLocationName(latlng) {
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latlng.lat}&lon=${latlng.lng}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Network error");
+      const data = await res.json();
+      return data.display_name || "";
+    } catch (err) {
+      console.error(err);
+      return "";
+    }
   }
 
   // SEARCH
   const searchBox = document.getElementById("searchBox");
   const searchResults = document.getElementById("searchResults");
+  const searchIcon = document.getElementById("searchIcon");
 
-  document.getElementById("searchIcon").onclick = search;
+  searchIcon.onclick = search;
   searchBox.onkeydown = (e) => { if (e.key === "Enter") search(); };
 
   async function search() {
@@ -204,8 +228,7 @@
 
       div.onclick = () => {
         const destLatLng = L.latLng(item.lat, item.lon);
-
-        updateCoordPanel(destLatLng);
+        updateCoordPanel(destLatLng, item.display_name);
         drawRoute(destLatLng);
         map.flyTo(destLatLng, 15);
         searchResults.style.display = "none";
@@ -218,29 +241,32 @@
   }
 
   document.addEventListener("click", (e) => {
-    if (e.target !== searchBox) searchResults.style.display = "none";
+    if (e.target !== searchBox && e.target !== searchIcon) {
+      searchResults.style.display = "none";
+    }
   });
 
   // TAP TO PICK LOCATION
-  map.on("click", (e) => {
-    updateCoordPanel(e.latlng);
+  map.on("click", async (e) => {
+    const name = await getLocationName(e.latlng);
+    updateCoordPanel(e.latlng, name);
     drawRoute(e.latlng);
   });
 
   // Toggle Directions Panel
-  document.getElementById("toggleInstructions").onclick = () => {
+  const toggleBtn = document.getElementById("toggleInstructions");
+  toggleBtn.onclick = () => {
     const container = document.querySelector(".leaflet-routing-container");
     if (!container) return;
 
-    if (container.style.display === "none") {
+    if (container.style.display === "none" || container.style.display === "") {
       container.style.display = "block";
-      toggleInstructions.textContent = "❌ Hide Directions";
+      toggleBtn.textContent = "❌ Hide Directions";
     } else {
       container.style.display = "none";
-      toggleInstructions.textContent = "🗺️ Show Directions";
+      toggleBtn.textContent = "🗺️ Show Directions";
     }
   };
-
 </script>
 
 </body>
