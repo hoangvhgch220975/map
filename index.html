@@ -174,6 +174,7 @@
   let startMarker = L.marker(startLatLng).addTo(map);
   let routingControl = null;
   let destMarker = null;
+  let currentDistance = 0; // Store current distance
 
   // Try to get current location by browser geolocation
   if (navigator.geolocation) {
@@ -204,6 +205,7 @@
   }
 
   function updateDistance(distanceKm) {
+    currentDistance = distanceKm;
     document.getElementById("distanceVal").textContent = distanceKm;
   }
 
@@ -252,17 +254,19 @@
   }
 
   // Send result to Flutter via JavaScript channel if available
-  function notifyFlutter(latlng, name) {
+  function notifyFlutter(latlng, name, distance) {
     try {
       if (window.MapPickerChannel && window.MapPickerChannel.postMessage) {
         const payload = {
           lat: latlng.lat,
           lon: latlng.lng,
-          name: name || document.getElementById("nameVal")?.textContent || ""
+          name: name || document.getElementById("nameVal")?.textContent || "",
+          distance: parseFloat(distance) || 0
         };
         window.MapPickerChannel.postMessage(JSON.stringify(payload));
       } else {
         console.log("MapPickerChannel not available - probably running in normal browser");
+        console.log("Would send:", {lat: latlng.lat, lon: latlng.lng, name: name, distance: distance});
       }
     } catch (e) {
       console.error("notifyFlutter error", e);
@@ -304,10 +308,12 @@
         drawRoute(destLatLng);
         map.flyTo(destLatLng, 15);
 
-        // Send picked location to Flutter
-        notifyFlutter(destLatLng, name);
-
         searchResults.style.display = "none";
+        
+        // Wait a bit for route calculation to complete
+        setTimeout(() => {
+          notifyFlutter(destLatLng, name, currentDistance);
+        }, 1000);
       };
 
       searchResults.appendChild(div);
@@ -328,8 +334,10 @@
     updateCoordPanel(e.latlng, name);
     drawRoute(e.latlng);
 
-    // Send picked location to Flutter
-    notifyFlutter(e.latlng, name);
+    // Wait a bit for route calculation to complete
+    setTimeout(() => {
+      notifyFlutter(e.latlng, name, currentDistance);
+    }, 1000);
   });
 
   // Toggle Directions Panel
@@ -350,3 +358,4 @@
 
 </body>
 </html>
+
