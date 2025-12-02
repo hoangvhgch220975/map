@@ -140,7 +140,7 @@
 <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.min.js"></script>
 
 <script>
-  // Default start point (fallback nếu không lấy được geolocation)
+  // Default start point (fallback if geolocation is not available)
   let startLatLng = L.latLng(21.023872, 105.790434);
 
   const map = L.map('map', {
@@ -155,7 +155,7 @@
   let routingControl = null;
   let destMarker = null;
 
-  // Lấy vị trí hiện tại của user bằng geolocation
+  // Try to get current location by browser geolocation
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -183,14 +183,18 @@
     }
   }
 
+  function updateDistance(distanceKm) {
+    document.getElementById("distanceVal").textContent = distanceKm;
+  }
+
   function drawRoute(destLatLng) {
     if (routingControl) map.removeControl(routingControl);
     if (destMarker) map.removeLayer(destMarker);
 
     destMarker = L.marker(destLatLng).addTo(map);
 
-    // Reset distance khi vẽ route mới
-    document.getElementById("distanceVal").textContent = "0";
+    // Reset distance when drawing a new route
+    updateDistance("0");
 
     routingControl = L.Routing.control({
       waypoints: [startLatLng, destLatLng],
@@ -200,12 +204,11 @@
       lineOptions: { styles: [{ color: 'blue', weight: 5 }] }
     }).addTo(map);
 
-    // Lấy tổng quãng đường theo km từ route summary
     routingControl.on("routesfound", function(e) {
       const route = e.routes[0];
       if (!route || !route.summary) return;
       const distanceKm = (route.summary.totalDistance / 1000).toFixed(2);
-      document.getElementById("distanceVal").textContent = distanceKm;
+      updateDistance(distanceKm);
     });
 
     const container = document.querySelector(".leaflet-routing-container");
@@ -214,7 +217,7 @@
     }
   }
 
-  // Reverse geocoding để lấy tên từ tọa độ
+  // Reverse geocoding to get name from coordinates
   async function getLocationName(latlng) {
     try {
       const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latlng.lat}&lon=${latlng.lng}`;
@@ -225,6 +228,24 @@
     } catch (err) {
       console.error(err);
       return "";
+    }
+  }
+
+  // Send result to Flutter via JavaScript channel if available
+  function notifyFlutter(latlng, name) {
+    try {
+      if (window.MapPickerChannel && window.MapPickerChannel.postMessage) {
+        const payload = {
+          lat: latlng.lat,
+          lon: latlng.lng,
+          name: name || document.getElementById("nameVal")?.textContent || ""
+        };
+        window.MapPickerChannel.postMessage(JSON.stringify(payload));
+      } else {
+        console.log("MapPickerChannel not available - probably running in normal browser");
+      }
+    } catch (e) {
+      console.error("notifyFlutter error", e);
     }
   }
 
@@ -257,9 +278,15 @@
 
       div.onclick = () => {
         const destLatLng = L.latLng(item.lat, item.lon);
-        updateCoordPanel(destLatLng, item.display_name);
+        const name = item.display_name;
+
+        updateCoordPanel(destLatLng, name);
         drawRoute(destLatLng);
         map.flyTo(destLatLng, 15);
+
+        // Send picked location to Flutter
+        notifyFlutter(destLatLng, name);
+
         searchResults.style.display = "none";
       };
 
@@ -280,6 +307,9 @@
     const name = await getLocationName(e.latlng);
     updateCoordPanel(e.latlng, name);
     drawRoute(e.latlng);
+
+    // Send picked location to Flutter
+    notifyFlutter(e.latlng, name);
   });
 
   // Toggle Directions Panel
