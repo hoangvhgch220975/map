@@ -127,7 +127,8 @@
   <strong>Picked Location:</strong><br>
   Name: <span id="nameVal">None</span><br>
   Lat: <span id="latVal">None</span><br>
-  Lon: <span id="lonVal">None</span>
+  Lon: <span id="lonVal">None</span><br>
+  Distance: <span id="distanceVal">0</span> km
 </div>
 
 <div id="searchResults"></div>
@@ -139,6 +140,7 @@
 <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.min.js"></script>
 
 <script>
+  // Default start point (fallback nếu không lấy được geolocation)
   let startLatLng = L.latLng(21.023872, 105.790434);
 
   const map = L.map('map', {
@@ -152,6 +154,22 @@
   let startMarker = L.marker(startLatLng).addTo(map);
   let routingControl = null;
   let destMarker = null;
+
+  // Lấy vị trí hiện tại của user bằng geolocation
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        startLatLng = L.latLng(position.coords.latitude, position.coords.longitude);
+        startMarker.setLatLng(startLatLng);
+        map.setView(startLatLng, 14);
+      },
+      (error) => {
+        console.warn("Geolocation failed:", error);
+      }
+    );
+  } else {
+    console.warn("Geolocation is not supported by this browser.");
+  }
 
   function updateCoordPanel(latlng, name) {
     document.getElementById("latVal").textContent = latlng.lat.toFixed(6);
@@ -171,6 +189,9 @@
 
     destMarker = L.marker(destLatLng).addTo(map);
 
+    // Reset distance khi vẽ route mới
+    document.getElementById("distanceVal").textContent = "0";
+
     routingControl = L.Routing.control({
       waypoints: [startLatLng, destLatLng],
       routeWhileDragging: false,
@@ -179,13 +200,21 @@
       lineOptions: { styles: [{ color: 'blue', weight: 5 }] }
     }).addTo(map);
 
+    // Lấy tổng quãng đường theo km từ route summary
+    routingControl.on("routesfound", function(e) {
+      const route = e.routes[0];
+      if (!route || !route.summary) return;
+      const distanceKm = (route.summary.totalDistance / 1000).toFixed(2);
+      document.getElementById("distanceVal").textContent = distanceKm;
+    });
+
     const container = document.querySelector(".leaflet-routing-container");
     if (container) {
       container.style.display = "none";
     }
   }
 
-  // Reverse geocoding to get name from coordinates
+  // Reverse geocoding để lấy tên từ tọa độ
   async function getLocationName(latlng) {
     try {
       const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latlng.lat}&lon=${latlng.lng}`;
