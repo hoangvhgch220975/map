@@ -2,26 +2,23 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Map Picker & Routing</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Map Picker</title>
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
 <style>
 html, body {
   height: 100%;
   margin: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont;
+  font-family: system-ui;
 }
 
 #map {
   height: 100%;
-  width: 100%;
 }
 
-/* Search bar */
+/* Search */
 #searchBar {
   position: absolute;
   top: 16px;
@@ -29,31 +26,30 @@ html, body {
   transform: translateX(-50%);
   width: 420px;
   max-width: calc(100% - 32px);
-  z-index: 2000;
   display: flex;
   background: #fff;
   border-radius: 10px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
   overflow: hidden;
+  z-index: 2000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 
 #searchBox {
   flex: 1;
   border: none;
-  padding: 12px 14px;
-  font-size: 15px;
+  padding: 12px;
   outline: none;
 }
 
-#searchIcon {
-  width: 48px;
+#searchBtn {
+  width: 50px;
   border: none;
   background: #1e88e5;
   color: #fff;
   cursor: pointer;
 }
 
-/* Search results */
+/* Results */
 #searchResults {
   position: absolute;
   top: 68px;
@@ -61,42 +57,36 @@ html, body {
   transform: translateX(-50%);
   width: 420px;
   max-width: calc(100% - 32px);
-  background: white;
+  background: #fff;
   border-radius: 10px;
-  box-shadow: 0 6px 14px rgba(0,0,0,0.2);
-  z-index: 2001;
+  overflow: hidden;
   display: none;
-  max-height: 260px;
-  overflow-y: auto;
+  z-index: 2001;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.2);
 }
 
 .result-item {
-  padding: 10px 14px;
+  padding: 10px;
   cursor: pointer;
   border-bottom: 1px solid #eee;
-  font-size: 14px;
 }
 
 .result-item:hover {
   background: #f2f6ff;
 }
 
-/* Button */
-.custom-button {
+/* URL box */
+#urlBox {
   position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 1500;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
   background: #fff;
+  padding: 10px 14px;
   border-radius: 8px;
-  padding: 8px 14px;
-  cursor: pointer;
+  font-size: 13px;
+  z-index: 2000;
   box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-  font-size: 14px;
-}
-
-.leaflet-routing-container {
-  display: none;
 }
 </style>
 </head>
@@ -104,110 +94,122 @@ html, body {
 <body>
 
 <div id="searchBar">
-  <input id="searchBox" type="text" placeholder="Search location..." autocomplete="off">
-  <button id="searchIcon"><i class="fa fa-search"></i></button>
+  <input id="searchBox" placeholder="Search location..." autocomplete="off"/>
+  <button id="searchBtn">🔍</button>
 </div>
 
 <div id="searchResults"></div>
-<div class="custom-button" id="toggleInstructions">🗺️ Directions</div>
+<div id="urlBox">Loading...</div>
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.min.js"></script>
 
 <script>
-/* ================= MAP INIT ================= */
-let startLatLng = L.latLng(21.023872, 105.790434);
-const map = L.map("map").setView(startLatLng, 14);
+/* ================= INIT ================= */
+const DEFAULT_LAT = 21.0285;
+const DEFAULT_LNG = 105.8542;
 
+const map = L.map("map").setView([DEFAULT_LAT, DEFAULT_LNG], 13);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
 
-let startMarker = L.marker(startLatLng).addTo(map);
-let destMarker = null;
-let routingControl = null;
-let currentDistance = 0;
+let marker = null;
 
-/* ================= GEOLOCATION ================= */
-if (navigator.geolocation) {
-  navigator.geolocation.getCurrentPosition(pos => {
-    startLatLng = L.latLng(pos.coords.latitude, pos.coords.longitude);
-    startMarker.setLatLng(startLatLng);
-    map.setView(startLatLng, 14);
-  });
+/* ================= GET PARAM ================= */
+function getParams() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    lat: parseFloat(params.get("lat")),
+    lng: parseFloat(params.get("lng"))
+  };
 }
 
-/* ================= ROUTING ================= */
-function drawRoute(destLatLng) {
-  if (routingControl) map.removeControl(routingControl);
-  if (destMarker) map.removeLayer(destMarker);
+/* ================= UPDATE URL ================= */
+function updateURL(lat, lng) {
+  const url = `${location.pathname}?lat=${lat}&lng=${lng}`;
+  document.getElementById("urlBox").textContent = location.origin + url;
 
-  destMarker = L.marker(destLatLng).addTo(map);
-
-  routingControl = L.Routing.control({
-    waypoints: [startLatLng, destLatLng],
-    addWaypoints: false,
-    routeWhileDragging: false,
-    fitSelectedRoutes: true,
-    show: false,
-    lineOptions: { styles: [{ color: "#1e88e5", weight: 5 }] }
-  }).addTo(map);
-
-  routingControl.on("routesfound", e => {
-    currentDistance = (e.routes[0].summary.totalDistance / 1000).toFixed(2);
-  });
+  window.history.replaceState({}, "", url);
 }
 
-/* ================= SEARCH (OPTIMIZED) ================= */
-const searchBox = document.getElementById("searchBox");
-const searchResults = document.getElementById("searchResults");
-let searchTimeout = null;
+/* ================= SET MARKER ================= */
+function setMarker(lat, lng, zoom = 15) {
+  if (marker) map.removeLayer(marker);
 
-searchBox.addEventListener("input", () => {
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(search, 400);
+  marker = L.marker([lat, lng]).addTo(map);
+  map.setView([lat, lng], zoom);
+
+  updateURL(lat.toFixed(6), lng.toFixed(6));
+}
+
+/* ================= LOAD FROM URL ================= */
+const { lat, lng } = getParams();
+
+if (!isNaN(lat) && !isNaN(lng)) {
+  setMarker(lat, lng);
+} else {
+  updateURL(DEFAULT_LAT, DEFAULT_LNG);
+}
+
+/* ================= CLICK MAP ================= */
+map.on("click", e => {
+  setMarker(e.latlng.lat, e.latlng.lng);
 });
 
-document.getElementById("searchIcon").onclick = search;
+/* ================= SEARCH ================= */
+const searchBox = document.getElementById("searchBox");
+const searchResults = document.getElementById("searchResults");
+
+let debounce = null;
+
+searchBox.addEventListener("input", () => {
+  clearTimeout(debounce);
+  debounce = setTimeout(search, 400);
+});
+
+document.getElementById("searchBtn").onclick = search;
 
 async function search() {
   const q = searchBox.value.trim();
   if (q.length < 2) return;
 
   const res = await fetch(
-    `https://nominatim.openstreetmap.org/search?format=json&limit=6&q=${encodeURIComponent(q)}`
+    `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(q)}`
   );
-  const data = await res.json();
 
+  const data = await res.json();
   searchResults.innerHTML = "";
-  if (!data.length) return (searchResults.style.display = "none");
+
+  if (!data.length) {
+    searchResults.style.display = "none";
+    return;
+  }
 
   data.forEach(item => {
     const div = document.createElement("div");
     div.className = "result-item";
     div.textContent = item.display_name;
+
     div.onclick = () => {
-      const dest = L.latLng(item.lat, item.lon);
-      map.flyTo(dest, 15);
-      drawRoute(dest);
+      const lat = parseFloat(item.lat);
+      const lng = parseFloat(item.lon);
+
+      setMarker(lat, lng);
       searchResults.style.display = "none";
     };
+
     searchResults.appendChild(div);
   });
 
   searchResults.style.display = "block";
 }
 
-/* ================= TAP PICK ================= */
-map.on("click", e => {
-  drawRoute(e.latlng);
+/* ================= HIDE RESULT CLICK OUTSIDE ================= */
+document.addEventListener("click", e => {
+  if (!document.getElementById("searchBar").contains(e.target)) {
+    searchResults.style.display = "none";
+  }
 });
-
-/* ================= TOGGLE DIRECTIONS ================= */
-document.getElementById("toggleInstructions").onclick = () => {
-  const c = document.querySelector(".leaflet-routing-container");
-  if (!c) return;
-  c.style.display = c.style.display === "block" ? "none" : "block";
-};
 </script>
+
 </body>
 </html>
