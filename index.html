@@ -123,31 +123,44 @@ function getParams() {
   };
 }
 
+/* ================= SHOW URL ONLY ================= */
+function showURL(lat, lng) {
+  const url = `${location.origin}${location.pathname}?lat=${lat}&lng=${lng}`;
+  document.getElementById("urlBox").textContent = url;
+}
+
 /* ================= UPDATE URL ================= */
 function updateURL(lat, lng) {
   const url = `${location.pathname}?lat=${lat}&lng=${lng}`;
   document.getElementById("urlBox").textContent = location.origin + url;
-
   window.history.replaceState({}, "", url);
 }
 
 /* ================= SET MARKER ================= */
-function setMarker(lat, lng, zoom = 15) {
+function setMarker(lat, lng, zoom = 15, shouldUpdateURL = true) {
   if (marker) map.removeLayer(marker);
 
   marker = L.marker([lat, lng]).addTo(map);
   map.setView([lat, lng], zoom);
 
-  updateURL(lat.toFixed(6), lng.toFixed(6));
+  const fixedLat = Number(lat).toFixed(6);
+  const fixedLng = Number(lng).toFixed(6);
+
+  if (shouldUpdateURL) {
+    updateURL(fixedLat, fixedLng);
+  } else {
+    showURL(fixedLat, fixedLng);
+  }
 }
 
 /* ================= LOAD FROM URL ================= */
 const { lat, lng } = getParams();
 
 if (!isNaN(lat) && !isNaN(lng)) {
-  setMarker(lat, lng);
+  setMarker(lat, lng, 15, false);
 } else {
-  updateURL(DEFAULT_LAT, DEFAULT_LNG);
+  map.setView([DEFAULT_LAT, DEFAULT_LNG], 13);
+  showURL(DEFAULT_LAT.toFixed(6), DEFAULT_LNG.toFixed(6));
 }
 
 /* ================= CLICK MAP ================= */
@@ -205,7 +218,10 @@ async function search() {
 
 /* ================= HIDE RESULT CLICK OUTSIDE ================= */
 document.addEventListener("click", e => {
-  if (!document.getElementById("searchBar").contains(e.target)) {
+  if (
+    !document.getElementById("searchBar").contains(e.target) &&
+    !searchResults.contains(e.target)
+  ) {
     searchResults.style.display = "none";
   }
 });
